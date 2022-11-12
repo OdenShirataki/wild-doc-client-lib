@@ -10,6 +10,8 @@ description = "This is still in development."
 repository = "https://github.com/OdenShirataki/wild-doc-server"
 
 keywords = ["database","javascript","v8","xml","html"]
-categories = ["database","database-implementations","Text processing","Web programming","Template engine"]
+categories = ["database","database-implementations","network-programming","template-engine"]
+
+license = "MIT/Apache-2.0"
 
 [dependencies]
