@@ -4,18 +4,28 @@ use std::io::{BufReader,BufRead,Write, Read};
 
 pub struct WildDocClient{
     document_root:String
+    ,dbname:String
     ,sock:TcpStream
 }
 impl WildDocClient{
-    pub fn new(document_root:&str)->Self{
+    pub fn new(document_root:&str,dbname:&str)->Self{
         let sock=TcpStream::connect("localhost:51818").expect("failed to connect server");
         sock.set_nonblocking(false).expect("out of service");
+        dbg!(document_root,dbname);
         Self{
-            document_root:std::path::Path::new(document_root).to_str().unwrap().to_owned()
+            document_root:std::path::Path::new(&(document_root.to_owned()+dbname)).to_str().unwrap().to_owned()
+            ,dbname:dbname.to_owned()
             ,sock
         }
     }
     pub fn exec(&mut self,xml:&str)->Vec<u8>{
+        match self.sock.try_clone().unwrap().write_all(self.dbname.as_bytes()){
+            Ok(())=>{
+                self.sock.try_clone().unwrap().write(&[0]).unwrap();
+            }
+            ,Err(v) => println!("send message failed:{}",v)
+        }
+
         let mut include_cache=HashMap::new();
         match self.sock.try_clone().unwrap().write_all(xml.as_bytes()){
             Ok(())=>{
@@ -75,7 +85,7 @@ mod tests {
 
     #[test]
     fn it_works() {
-        let mut client=WildDocClient::new("./test/");
+        let mut client=WildDocClient::new("./test/","test");
         client.exec(r#"<wd><wd:session name="hoge">
             <wd:update commit="1">
                 <collection name="person">
