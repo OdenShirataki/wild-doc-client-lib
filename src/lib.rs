@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::net::{TcpStream};
 use std::io::{BufReader,BufRead,Write, Read};
 
@@ -15,6 +16,7 @@ impl WildDocClient{
         }
     }
     pub fn exec(&mut self,xml:&str)->Vec<u8>{
+        let mut include_cache=HashMap::new();
         match self.sock.try_clone().unwrap().write_all(xml.as_bytes()){
             Ok(())=>{
                 self.sock.try_clone().unwrap().write(&[0]).unwrap();
@@ -31,16 +33,19 @@ impl WildDocClient{
                         if let Ok(str)=std::str::from_utf8(&recv_include){
                             let s: Vec<&str>=str.split(':').collect();
                             let path=self.document_root.to_owned()+s[1];
-                            let xml=match std::fs::File::open(path.trim()){
-                                Ok(mut f)=>{
-                                    let mut contents=String::new();
-                                    let _=f.read_to_string(&mut contents);
-                                    contents
+                            let path=path.trim().to_owned();
+                            let xml=include_cache.entry(path).or_insert_with_key(|path|{
+                                match std::fs::File::open(path){
+                                    Ok(mut f)=>{
+                                        let mut contents=String::new();
+                                        let _=f.read_to_string(&mut contents);
+                                        contents
+                                    }
+                                    ,_=>{
+                                        "".to_string()
+                                    }
                                 }
-                                ,_=>{
-                                    "".to_string()
-                                }
-                            };
+                            });
                             match self.sock.try_clone().unwrap().write_all(xml.as_bytes()){
                                 Ok(())=>{
                                     self.sock.try_clone().unwrap().write(&[0]).unwrap();
