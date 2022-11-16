@@ -4,79 +4,70 @@ use std::io::{BufReader,BufRead,Write, Read};
 
 pub struct WildDocClient{
     document_root:String
-    ,dbname:String
+    ,dbname:Vec<u8>
     ,sock:TcpStream
 }
 impl WildDocClient{
     pub fn new(document_root:&str,dbname:&str)->Self{
         let sock=TcpStream::connect("localhost:51818").expect("failed to connect server");
         sock.set_nonblocking(false).expect("out of service");
-        dbg!(document_root,dbname);
+        let document_root=std::path::Path::new(&(document_root.to_owned()+dbname)).to_str().unwrap().to_owned();
+        let mut dbname=dbname.as_bytes().to_owned();
+        dbname.push(0);
         Self{
-            document_root:std::path::Path::new(&(document_root.to_owned()+dbname)).to_str().unwrap().to_owned()
-            ,dbname:dbname.to_owned()
+            document_root
+            ,dbname
             ,sock
         }
     }
-    pub fn exec(&mut self,xml:&str)->Vec<u8>{
-        match self.sock.try_clone().unwrap().write_all(self.dbname.as_bytes()){
-            Ok(())=>{
-                self.sock.try_clone().unwrap().write(&[0]).unwrap();
-            }
-            ,Err(v) => println!("send message failed:{}",v)
-        }
-
+    pub fn exec(&mut self,xml:&str)->std::io::Result<Vec<u8>>{
+        println!("exec");
         let mut include_cache=HashMap::new();
-        match self.sock.try_clone().unwrap().write_all(xml.as_bytes()){
-            Ok(())=>{
-                self.sock.try_clone().unwrap().write(&[0]).unwrap();
-            }
-            ,Err(v) => println!("send message failed:{}",v)
-        }
+        let mut recv_response = Vec::new();
+        self.sock.try_clone().unwrap().write_all(&self.dbname)?;
+
+        println!("send dbname OK.");
+        let mut xml=xml.as_bytes().to_owned();
+        xml.push(0);
+        self.sock.try_clone().unwrap().write_all(&xml)?;
+        
+        println!("send xml OK.");
+        
         loop{
             let mut recv_include = Vec::new();
             let mut reader = BufReader::new(&self.sock);
-            if let Ok(v) = reader.read_until(0,&mut recv_include) {
-                if v > 0 {
-                    if recv_include.starts_with(b"include:"){
-                        recv_include.remove(recv_include.len()-1);
-                        if let Ok(str)=std::str::from_utf8(&recv_include){
-                            let s: Vec<&str>=str.split(':').collect();
-                            let path=self.document_root.to_owned()+s[1];
-                            let path=path.trim().to_owned();
-                            let xml=include_cache.entry(path).or_insert_with_key(|path|{
-                                match std::fs::File::open(path){
-                                    Ok(mut f)=>{
-                                        let mut contents=String::new();
-                                        let _=f.read_to_string(&mut contents);
-                                        contents
-                                    }
-                                    ,_=>{
-                                        "".to_string()
-                                    }
+            if reader.read_until(0,&mut recv_include)? > 0 {
+                if recv_include.starts_with(b"include:"){
+                    recv_include.remove(recv_include.len()-1);
+                    if let Ok(str)=std::str::from_utf8(&recv_include){
+                        let s: Vec<&str>=str.split(':').collect();
+                        let path=self.document_root.to_owned()+s[1];
+                        let path=path.trim().to_owned();
+                        let xml=include_cache.entry(path).or_insert_with_key(|path|{
+                            match std::fs::File::open(path){
+                                Ok(mut f)=>{
+                                    let mut contents=Vec::new();
+                                    let _=f.read_to_end(&mut contents);
+                                    contents
                                 }
-                            });
-                            match self.sock.try_clone().unwrap().write_all(xml.as_bytes()){
-                                Ok(())=>{
-                                    self.sock.try_clone().unwrap().write(&[0]).unwrap();
+                                ,_=>{
+                                    b"".to_vec()
                                 }
-                                ,Err(v) => println!("send message failed:{}",v)
                             }
-                        }
-                    }else{
-                        break;
+                        });
+                        xml.push(0);
+                        self.sock.try_clone().unwrap().write_all(&xml)?;
                     }
+                }else{
+                    break;
                 }
             }
         }
-        let mut recv_response = Vec::new();
+        
         let mut reader = BufReader::new(&self.sock);
-        if let Ok(v) = reader.read_until(0,&mut recv_response) {
-            if v > 0 {
-                println!("response:{}",std::str::from_utf8(&recv_response).unwrap());
-            }
-        }
-        recv_response
+        reader.read_until(0,&mut recv_response)?;
+        println!("exec end");
+        Ok(recv_response)
     }
 }
 #[cfg(test)]
@@ -101,7 +92,7 @@ mod tests {
                     <field name="country">UK</field>
                 </collection>
             </wd:update>
-        </wd:session></wd>"#);
+        </wd:session></wd>"#).unwrap();
         
         /*
         client.exec(r#"<wd>
@@ -175,7 +166,7 @@ mod tests {
                     </wd:for>
                 </wd:result>
             </wd:update>
-        </wd:session></wd>"#);
+        </wd:session></wd>"#).unwrap();
         client.exec(r#"<wd>
             <wd:search name="p" collection="person"></wd:search>
             <wd:result var="q" search="p">
@@ -188,6 +179,6 @@ mod tests {
                     </li></wd:for>
                 </ul>
             </wd:result>
-        </wd>"#);
+        </wd>"#).unwrap();
     }
 }
