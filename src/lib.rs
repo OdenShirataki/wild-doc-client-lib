@@ -8,8 +8,8 @@ pub struct WildDocClient{
     ,sock:TcpStream
 }
 impl WildDocClient{
-    pub fn new(document_root:&str,dbname:&str)->Self{
-        let sock=TcpStream::connect("localhost:51818").expect("failed to connect server");
+    pub fn new(host:&str,port:&str,document_root:&str,dbname:&str)->Self{
+        let sock=TcpStream::connect(&(host.to_owned()+":"+port)).expect("failed to connect server");
         sock.set_nonblocking(false).expect("out of service");
         let document_root=std::path::Path::new(&(document_root.to_owned()+dbname)).to_str().unwrap().to_owned();
         let mut dbname=dbname.as_bytes().to_owned();
@@ -76,7 +76,7 @@ mod tests {
 
     #[test]
     fn it_works() {
-        let mut client=WildDocClient::new("./test/","test");
+        let mut client=WildDocClient::new("localhost","51818","./test/","test");
         client.exec(r#"<wd><wd:session name="hoge">
             <wd:update commit="1">
                 <collection name="person">
