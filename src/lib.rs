@@ -4,7 +4,7 @@ use std::io::{BufReader,BufRead,Write, Read};
 
 pub struct WildDocClient{
     document_root:String
-    ,dbname:Vec<u8>
+    ,dbname:String
     ,sock:TcpStream
 }
 impl WildDocClient{
@@ -12,27 +12,21 @@ impl WildDocClient{
         let sock=TcpStream::connect(&(host.to_owned()+":"+port)).expect("failed to connect server");
         sock.set_nonblocking(false).expect("out of service");
         let document_root=std::path::Path::new(&(document_root.to_owned()+dbname)).to_str().unwrap().to_owned();
-        let mut dbname=dbname.as_bytes().to_owned();
-        dbname.push(0);
         Self{
             document_root
-            ,dbname
+            ,dbname:dbname.into()
             ,sock
         }
     }
     pub fn exec(&mut self,xml:&str)->std::io::Result<Vec<u8>>{
-        println!("exec");
         let mut include_cache=HashMap::new();
-        let mut recv_response = Vec::new();
-        self.sock.try_clone().unwrap().write_all(&self.dbname)?;
+        let mut recv_response=Vec::new();
 
-        println!("send dbname OK.");
-        let mut xml=xml.as_bytes().to_owned();
-        xml.push(0);
-        self.sock.try_clone().unwrap().write_all(&xml)?;
-        
-        println!("send xml OK.");
-        
+        let mut send_data=self.dbname.as_bytes().to_owned();
+        send_data.push(0);
+        send_data.append(&mut xml.as_bytes().to_owned());
+        send_data.push(0);
+        self.sock.try_clone().unwrap().write_all(&send_data)?;
         loop{
             let mut recv_include = Vec::new();
             let mut reader = BufReader::new(&self.sock);
@@ -66,7 +60,6 @@ impl WildDocClient{
         
         let mut reader = BufReader::new(&self.sock);
         reader.read_until(0,&mut recv_response)?;
-        println!("exec end");
         Ok(recv_response)
     }
 }
