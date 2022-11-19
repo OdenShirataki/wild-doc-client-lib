@@ -20,14 +20,12 @@ impl WildDocClient{
             ,sock
         }
     }
-    pub fn exec(&mut self,xml:&str,input_json:Option<String>)->std::io::Result<Vec<u8>>{
+    pub fn exec(&mut self,xml:&str,input_json:&str)->std::io::Result<Vec<u8>>{
         let mut include_cache=HashMap::new();
         let mut recv_response=Vec::new();
 
         self.sock.write_all(&self.dbname)?;
-        if let Some(input_json)=input_json{
-            self.sock.write_all(input_json.as_bytes())?;
-        }
+        self.sock.write_all(input_json.as_bytes())?;
         self.sock.write_all(&[0])?;
         self.sock.write_all(xml.as_bytes())?;
         self.sock.write_all(&[0])?;
@@ -92,7 +90,7 @@ mod tests {
                     <field name="country">UK</field>
                 </collection>
             </wd:update>
-        </wd:session></wd>"#,None).unwrap();
+        </wd:session></wd>"#,"").unwrap();
         
         /*
         client.exec(r#"<wd>
@@ -166,7 +164,7 @@ mod tests {
                     </wd:for>
                 </wd:result>
             </wd:update>
-        </wd:session></wd>"#,None).unwrap();
+        </wd:session></wd>"#,"").unwrap();
         client.exec(r#"<wd>
             <wd:search name="p" collection="person"></wd:search>
             <wd:result var="q" search="p">
@@ -179,6 +177,6 @@ mod tests {
                     </li></wd:for>
                 </ul>
             </wd:result>
-        </wd>"#,None).unwrap();
+        </wd>"#,"").unwrap();
     }
 }
