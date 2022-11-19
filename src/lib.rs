@@ -4,7 +4,7 @@ use std::io::{BufReader,BufRead,Write, Read};
 
 pub struct WildDocClient{
     document_root:String
-    ,dbname:String
+    ,dbname:Vec<u8>
     ,sock:TcpStream
 }
 impl WildDocClient{
@@ -12,24 +12,29 @@ impl WildDocClient{
         let sock=TcpStream::connect(&(host.to_owned()+":"+port)).expect("failed to connect server");
         sock.set_nonblocking(false).expect("out of service");
         let document_root=std::path::Path::new(&(document_root.to_owned()+dbname)).to_str().unwrap().to_owned();
+        let mut dbname=dbname.as_bytes().to_vec();
+        dbname.push(0);
         Self{
             document_root
-            ,dbname:dbname.into()
+            ,dbname
             ,sock
         }
     }
-    pub fn exec(&mut self,xml:&str)->std::io::Result<Vec<u8>>{
+    pub fn exec(&mut self,xml:&str,input_json:Option<String>)->std::io::Result<Vec<u8>>{
         let mut include_cache=HashMap::new();
         let mut recv_response=Vec::new();
 
-        let mut send_data=self.dbname.as_bytes().to_owned();
-        send_data.push(0);
-        send_data.append(&mut xml.as_bytes().to_owned());
-        send_data.push(0);
-        self.sock.try_clone().unwrap().write_all(&send_data)?;
+        self.sock.write_all(&self.dbname)?;
+        if let Some(input_json)=input_json{
+            self.sock.write_all(input_json.as_bytes())?;
+        }
+        self.sock.write_all(&[0])?;
+        self.sock.write_all(xml.as_bytes())?;
+        self.sock.write_all(&[0])?;
+
+        let mut reader=BufReader::new(self.sock.try_clone().unwrap());
         loop{
             let mut recv_include = Vec::new();
-            let mut reader = BufReader::new(&self.sock);
             if reader.read_until(0,&mut recv_include)? > 0 {
                 if recv_include.starts_with(b"include:"){
                     recv_include.remove(recv_include.len()-1);
@@ -37,7 +42,7 @@ impl WildDocClient{
                         let s: Vec<&str>=str.split(':').collect();
                         let path=self.document_root.to_owned()+s[1];
                         let path=path.trim().to_owned();
-                        let xml=include_cache.entry(path).or_insert_with_key(|path|{
+                        let include_xml=include_cache.entry(path).or_insert_with_key(|path|{
                             match std::fs::File::open(path){
                                 Ok(mut f)=>{
                                     let mut contents=Vec::new();
@@ -49,16 +54,18 @@ impl WildDocClient{
                                 }
                             }
                         });
-                        xml.push(0);
-                        self.sock.try_clone().unwrap().write_all(&xml)?;
+                        include_xml.push(0);
+                        self.sock.write_all(&include_xml)?;
+                    }else{
+                        break;
                     }
                 }else{
                     break;
                 }
+            }else{
+                break;
             }
         }
-        
-        let mut reader = BufReader::new(&self.sock);
         reader.read_until(0,&mut recv_response)?;
         Ok(recv_response)
     }
@@ -85,7 +92,7 @@ mod tests {
                     <field name="country">UK</field>
                 </collection>
             </wd:update>
-        </wd:session></wd>"#).unwrap();
+        </wd:session></wd>"#,None).unwrap();
         
         /*
         client.exec(r#"<wd>
@@ -159,7 +166,7 @@ mod tests {
                     </wd:for>
                 </wd:result>
             </wd:update>
-        </wd:session></wd>"#).unwrap();
+        </wd:session></wd>"#,None).unwrap();
         client.exec(r#"<wd>
             <wd:search name="p" collection="person"></wd:search>
             <wd:result var="q" search="p">
@@ -172,6 +179,6 @@ mod tests {
                     </li></wd:for>
                 </ul>
             </wd:result>
-        </wd>"#).unwrap();
+        </wd>"#,None).unwrap();
     }
 }
