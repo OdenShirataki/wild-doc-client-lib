@@ -4,19 +4,17 @@ use std::io::{BufReader,BufRead,Write, Read};
 
 pub struct WildDocClient{
     document_root:String
-    ,dbname:Vec<u8>
     ,sock:TcpStream
 }
 impl WildDocClient{
     pub fn new(host:&str,port:&str,document_root:&str,dbname:&str)->Self{
-        let sock=TcpStream::connect(&(host.to_owned()+":"+port)).expect("failed to connect server");
+        let mut sock=TcpStream::connect(&(host.to_owned()+":"+port)).expect("failed to connect server");
         sock.set_nonblocking(false).expect("out of service");
         let document_root=std::path::Path::new(&(document_root.to_owned()+dbname)).to_str().unwrap().to_owned();
-        let mut dbname=dbname.as_bytes().to_vec();
-        dbname.push(0);
+        sock.write_all(dbname.as_bytes()).unwrap();
+        sock.write_all(&[0]).unwrap();
         Self{
             document_root
-            ,dbname
             ,sock
         }
     }
@@ -24,8 +22,9 @@ impl WildDocClient{
         let mut include_cache=HashMap::new();
         let mut recv_response=Vec::new();
 
-        self.sock.write_all(&self.dbname)?;
-        self.sock.write_all(input_json.as_bytes())?;
+        if input_json.len()>0{
+            self.sock.write_all(input_json.as_bytes())?;
+        }
         self.sock.write_all(&[0])?;
         self.sock.write_all(xml.as_bytes())?;
         self.sock.write_all(&[0])?;
