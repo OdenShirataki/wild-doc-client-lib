@@ -13,6 +13,11 @@ impl WildDocClient{
         let document_root=std::path::Path::new(&(document_root.to_owned()+dbname)).to_str().unwrap().to_owned();
         sock.write_all(dbname.as_bytes()).unwrap();
         sock.write_all(&[0]).unwrap();
+
+        let mut sig=Vec::new();
+        let mut reader=BufReader::new(&sock);
+        reader.read_until(0,&mut sig).unwrap();
+
         Self{
             document_root
             ,sock
@@ -26,6 +31,7 @@ impl WildDocClient{
             self.sock.write_all(input_json.as_bytes())?;
         }
         self.sock.write_all(&[0])?;
+
         self.sock.write_all(xml.as_bytes())?;
         self.sock.write_all(&[0])?;
 
@@ -164,7 +170,7 @@ mod tests {
                 </wd:result>
             </wd:update>
         </wd:session></wd>"#,"").unwrap();
-        client.exec(r#"<wd>
+        let r=client.exec(r#"<wd>
             <wd:search name="p" collection="person"></wd:search>
             <wd:result var="q" search="p">
                 <div>
@@ -177,5 +183,6 @@ mod tests {
                 </ul>
             </wd:result>
         </wd>"#,"").unwrap();
+        println!("{}",std::str::from_utf8(&r).unwrap());
     }
 }
