@@ -2,6 +2,19 @@ use std::collections::HashMap;
 use std::net::{TcpStream};
 use std::io::{BufReader,BufRead,Write, Read};
 
+pub struct WildDocResult{
+    body:Vec<u8>
+    ,options_json:String
+}
+impl WildDocResult{
+    pub fn body(&self)->&[u8]{
+        &self.body
+    }
+    pub fn options_json(&self)->&str{
+        &self.options_json
+    }
+}
+
 pub struct WildDocClient{
     document_root:String
     ,sock:TcpStream
@@ -23,10 +36,9 @@ impl WildDocClient{
             ,sock
         }
     }
-    pub fn exec(&mut self,xml:&str,input_json:&str)->std::io::Result<Vec<u8>>{
+    pub fn exec(&mut self,xml:&str,input_json:&str)->std::io::Result<WildDocResult>{
         let mut include_cache=HashMap::new();
-        let mut recv_response=Vec::new();
-
+        
         if input_json.len()>0{
             self.sock.write_all(input_json.as_bytes())?;
         }
@@ -69,8 +81,16 @@ impl WildDocClient{
                 break;
             }
         }
-        reader.read_until(0,&mut recv_response)?;
-        Ok(recv_response)
+        let mut recv_body=Vec::new();
+        reader.read_until(0,&mut recv_body)?;
+    
+        let mut recv_options=Vec::new();
+        reader.read_until(0,&mut recv_options)?;
+
+        Ok(WildDocResult{
+            body:recv_body
+            ,options_json:String::from_utf8(recv_options).unwrap_or("".to_owned())
+        })
     }
 }
 #[cfg(test)]
@@ -183,6 +203,6 @@ mod tests {
                 </ul>
             </wd:result>
         </wd>"#,"").unwrap();
-        println!("{}",std::str::from_utf8(&r).unwrap());
+        println!("{}",std::str::from_utf8(&r.body()).unwrap());
     }
 }
