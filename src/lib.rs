@@ -83,9 +83,11 @@ impl WildDocClient{
         }
         let mut recv_body=Vec::new();
         reader.read_until(0,&mut recv_body)?;
+        recv_body.remove(recv_body.len()-1);
     
         let mut recv_options=Vec::new();
         reader.read_until(0,&mut recv_options)?;
+        recv_options.remove(recv_options.len()-1);
 
         Ok(WildDocResult{
             body:recv_body
