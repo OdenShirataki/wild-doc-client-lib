@@ -87,14 +87,14 @@ impl WildDocClient {
         }
 
         let mut len:[u8;8]=[0,0,0,0,0,0,0,0];
-        let _=reader.read_exact(&mut len);
+        reader.read_exact(&mut len)?;
         let len=u64::from_be_bytes(len) as usize;
         
         let mut recv_body = Vec::<u8>::with_capacity(len);
         unsafe{
             recv_body.set_len(len);
         }
-        let _=reader.read(recv_body.as_mut_slice());
+        reader.read_exact(recv_body.as_mut_slice())?;
 
         let mut recv_options = Vec::new();
         reader.read_until(0, &mut recv_options)?;
