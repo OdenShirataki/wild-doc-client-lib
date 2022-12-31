@@ -2,6 +2,7 @@ use std::{
     collections::HashMap,
     io::{BufRead, BufReader, Read, Write},
     net::TcpStream,
+    path::{Path, PathBuf}
 };
 
 pub struct WildDocResult {
@@ -18,18 +19,14 @@ impl WildDocResult {
 }
 
 pub struct WildDocClient {
-    document_root: String,
+    document_root: PathBuf,
     sock: TcpStream,
 }
 impl WildDocClient {
-    pub fn new(host: &str, port: &str, document_root: &str, dbname: &str) -> Self {
+    pub fn new<P:AsRef<Path>>(host: &str, port: &str, document_root: P, dbname: &str) -> Self {
         let mut sock =
             TcpStream::connect(&(host.to_owned() + ":" + port)).expect("failed to connect server");
         sock.set_nonblocking(false).expect("out of service");
-        let document_root = std::path::Path::new(&(document_root.to_owned() + dbname))
-            .to_str()
-            .unwrap()
-            .to_owned();
         sock.write_all(dbname.as_bytes()).unwrap();
         sock.write_all(&[0]).unwrap();
 
@@ -38,7 +35,11 @@ impl WildDocClient {
         reader.read_until(0, &mut sig).unwrap();
 
         Self {
-            document_root,
+            document_root:{
+                let mut path=document_root.as_ref().to_path_buf();
+                path.push(dbname);
+                path
+            },
             sock,
         }
     }
@@ -57,12 +58,14 @@ impl WildDocClient {
         loop {
             let mut recv_include = Vec::new();
             if reader.read_until(0, &mut recv_include)? > 0 {
-                if recv_include.starts_with(b"include:") {
+                if recv_include.starts_with(b"include:/") {
                     recv_include.remove(recv_include.len() - 1);
                     if let Ok(str) = std::str::from_utf8(&recv_include) {
-                        let s: Vec<&str> = str.split(':').collect();
-                        let path = self.document_root.to_owned() + s[1];
-                        let path = path.trim().to_owned();
+                        let s: Vec<&str> = str.split(":/").collect();
+
+                        let mut path=self.document_root.clone();
+                        path.push(s[1]);
+
                         let include_xml = include_cache.entry(path).or_insert_with_key(|path| {
                             match std::fs::File::open(path) {
                                 Ok(mut f) => {
