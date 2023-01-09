@@ -2,7 +2,7 @@ use std::{
     collections::HashMap,
     io::{BufRead, BufReader, Read, Write},
     net::TcpStream,
-    path::{Path, PathBuf}
+    path::{Path, PathBuf},
 };
 
 pub struct WildDocResult {
@@ -23,7 +23,7 @@ pub struct WildDocClient {
     sock: TcpStream,
 }
 impl WildDocClient {
-    pub fn new<P:AsRef<Path>>(host: &str, port: &str, document_root: P, dbname: &str) -> Self {
+    pub fn new<P: AsRef<Path>>(host: &str, port: &str, document_root: P, dbname: &str) -> Self {
         let mut sock =
             TcpStream::connect(&(host.to_owned() + ":" + port)).expect("failed to connect server");
         sock.set_nonblocking(false).expect("out of service");
@@ -35,8 +35,8 @@ impl WildDocClient {
         reader.read_until(0, &mut sig).unwrap();
 
         Self {
-            document_root:{
-                let mut path=document_root.as_ref().to_path_buf();
+            document_root: {
+                let mut path = document_root.as_ref().to_path_buf();
                 path.push(dbname);
                 path
             },
@@ -63,21 +63,30 @@ impl WildDocClient {
                     if let Ok(str) = std::str::from_utf8(&recv_include) {
                         let s: Vec<&str> = str.split(":/").collect();
 
-                        let mut path=self.document_root.clone();
+                        let mut path = self.document_root.clone();
                         path.push(s[1]);
 
-                        let include_xml = include_cache.entry(path).or_insert_with_key(|path| {
-                            match std::fs::File::open(path) {
-                                Ok(mut f) => {
-                                    let mut contents = Vec::new();
-                                    let _ = f.read_to_end(&mut contents);
-                                    contents
+                        if let Some(include_xml) =
+                            include_cache.entry(path).or_insert_with_key(|path| {
+                                match std::fs::File::open(path) {
+                                    Ok(mut f) => {
+                                        let mut contents = Vec::new();
+                                        let _ = f.read_to_end(&mut contents);
+                                        Some(contents)
+                                    }
+                                    _ => None,
                                 }
-                                _ => b"".to_vec(),
-                            }
-                        });
-                        include_xml.push(0);
-                        self.sock.write_all(&include_xml)?;
+                            })
+                        {
+                            let exists: [u8; 1] = [1];
+                            self.sock.write_all(&exists)?;
+                            let len = include_xml.len() as u64;
+                            self.sock.write_all(&len.to_be_bytes())?;
+                            self.sock.write_all(&include_xml)?;
+                        } else {
+                            let exists: [u8; 1] = [0];
+                            self.sock.write_all(&exists)?;
+                        }
                     } else {
                         break;
                     }
@@ -89,12 +98,12 @@ impl WildDocClient {
             }
         }
 
-        let mut len:[u8;8]=[0,0,0,0,0,0,0,0];
+        let mut len: [u8; 8] = [0, 0, 0, 0, 0, 0, 0, 0];
         reader.read_exact(&mut len)?;
-        let len=u64::from_be_bytes(len) as usize;
-        
+        let len = u64::from_be_bytes(len) as usize;
+
         let mut recv_body = Vec::<u8>::with_capacity(len);
-        unsafe{
+        unsafe {
             recv_body.set_len(len);
         }
         reader.read_exact(recv_body.as_mut_slice())?;
